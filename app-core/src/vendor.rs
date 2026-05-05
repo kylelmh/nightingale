@@ -474,6 +474,31 @@ pub fn step_install_packages() -> Result<(), String> {
         return Err(format!("Build deps install failed: {stderr}"));
     }
 
+    // Install ONNX Runtime GPU for aarch64 from Jetson AI Lab repository BEFORE other packages
+    // This prevents dependency resolution issues when other packages depend on onnxruntime
+    #[cfg(target_arch = "aarch64")]
+    if gpu.device == "cuda" {
+        let onnx_args: Vec<&str> = vec![
+            "pip",
+            "install",
+            "onnxruntime-gpu==1.23.0",
+            "--python",
+            &py_str,
+            "--index-url",
+            "https://pypi.jetson-ai-lab.io/jp6/cu126",
+        ];
+
+        let output = silent_command(&uv)
+            .args(&onnx_args)
+            .output()
+            .map_err(|e| format!("Failed to install ONNX Runtime GPU: {e}"))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("ONNX Runtime GPU install failed: {stderr}"));
+        }
+    }
+
     let mut pkg_args: Vec<&str> = vec![
         "pip",
         "install",
@@ -529,30 +554,6 @@ pub fn step_install_packages() -> Result<(), String> {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("CUDA PyTorch install failed: {stderr}"));
-        }
-    }
-
-    // Install ONNX Runtime GPU for aarch64 from Jetson AI Lab repository
-    #[cfg(target_arch = "aarch64")]
-    if gpu.device == "cuda" {
-        let onnx_args: Vec<&str> = vec![
-            "pip",
-            "install",
-            "onnxruntime-gpu==1.23.0",
-            "--python",
-            &py_str,
-            "--index-url",
-            "https://pypi.jetson-ai-lab.io/jp6/cu126",
-        ];
-
-        let output = silent_command(&uv)
-            .args(&onnx_args)
-            .output()
-            .map_err(|e| format!("Failed to install ONNX Runtime GPU: {e}"))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("ONNX Runtime GPU install failed: {stderr}"));
         }
     }
 
