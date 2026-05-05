@@ -474,31 +474,6 @@ pub fn step_install_packages() -> Result<(), String> {
         return Err(format!("Build deps install failed: {stderr}"));
     }
 
-    // Install ONNX Runtime GPU for aarch64 from Jetson AI Lab repository BEFORE other packages
-    // This prevents dependency resolution issues when other packages depend on onnxruntime
-    #[cfg(target_arch = "aarch64")]
-    if gpu.device == "cuda" {
-        let onnx_args: Vec<&str> = vec![
-            "pip",
-            "install",
-            "onnxruntime-gpu==1.23.0",
-            "--python",
-            &py_str,
-            "--index-url",
-            "https://pypi.jetson-ai-lab.io/jp6/cu126",
-        ];
-
-        let output = silent_command(&uv)
-            .args(&onnx_args)
-            .output()
-            .map_err(|e| format!("Failed to install ONNX Runtime GPU: {e}"))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("ONNX Runtime GPU install failed: {stderr}"));
-        }
-    }
-
     let mut pkg_args: Vec<&str> = vec![
         "pip",
         "install",
@@ -509,9 +484,22 @@ pub fn step_install_packages() -> Result<(), String> {
         audio_sep_pkg,
     ];
 
+    // Add explicit onnxruntime-gpu for aarch64 CUDA systems to control version
+    #[cfg(target_arch = "aarch64")]
+    if gpu.device == "cuda" {
+        pkg_args.push("onnxruntime-gpu==1.23.0");
+    }
+
     if gpu.legacy_torch {
         pkg_args.push("torch<2.3");
         pkg_args.push("torchaudio<2.3");
+    }
+
+    // Add Jetson AI Lab repository as extra index for aarch64 CUDA systems
+    #[cfg(target_arch = "aarch64")]
+    if gpu.device == "cuda" {
+        pkg_args.push("--extra-index-url");
+        pkg_args.push("https://pypi.jetson-ai-lab.io/jp6/cu126");
     }
 
     pkg_args.push("--python");
